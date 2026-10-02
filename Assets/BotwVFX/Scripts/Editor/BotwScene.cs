@@ -108,6 +108,13 @@ namespace BotwVfx.EditorTools
             var explosion = PlaceEffect(BotwEffects.ExplosionPath, effectsRoot, Stations[1]);
             var guardian = PlaceEffect(BotwEffects.GuardianBeamPath, effectsRoot, Stations[2]);
             var arrow = PlaceEffect(BotwEffects.AncientArrowPath, effectsRoot, Stations[3]);
+            var bombV2 = PlaceEffect(BotwEffects.RemoteBombV2Path, effectsRoot, Stations[0]);
+            var explosionV2 = PlaceEffect(BotwEffects.ExplosionV2Path, effectsRoot, Stations[1]);
+            var guardianV2 = PlaceEffect(BotwEffects.GuardianBeamV2Path, effectsRoot, Stations[2]);
+            var arrowV2 = PlaceEffect(BotwEffects.AncientArrowV2Path, effectsRoot, Stations[3]);
+            // La demo arranca mostrando las variaciones; los originales quedan desactivados (tecla V).
+            foreach (var original in new[] { bomb, explosion, guardian, arrow })
+                original.gameObject.SetActive(false);
             BuildGuardianStandIn(env, Stations[2] + BotwEffects.GuardianEyeLocal, Stations[2] + new Vector3(0f, 0.6f, 0f));
 
             // ---------------- Cámara y post-proceso
@@ -129,7 +136,9 @@ namespace BotwVfx.EditorTools
             volume.isGlobal = true;
             volume.sharedProfile = BuildProfile();
 
-            new GameObject("VfxDirector").AddComponent<VfxDirector>();
+            var director = new GameObject("VfxDirector");
+            director.AddComponent<VfxDirector>();
+            director.AddComponent<VfxScreenFlash>();
 
             var demo = new GameObject("Demo").AddComponent<DemoController>();
             demo.targetCamera = cam;
@@ -138,24 +147,32 @@ namespace BotwVfx.EditorTools
                 new DemoController.Station
                 {
                     name = "Bomba remota", effect = bomb,
+                    variant = bombV2,
+                    variantDescription = "V2: borde de la esfera roto en llamas, rampa Sheikah, onda de distorsión, polvo iluminado por el sol, destello y sonido.",
                     description = "Esfera con fresnel + brillo de intersección con el suelo, 8 rayos largos y 50 chispas (vídeo de Daniel Ilett).",
                     focus = Stations[0] + new Vector3(0f, 1.4f, 0f), yaw = 15f, pitch = 14f, distance = 12f,
                 },
                 new DemoController.Station
                 {
                     name = "Explosión", effect = explosion,
+                    variant = explosionV2,
+                    variantDescription = "V2: fuego con rampa de color, onda de aire que distorsiona, calor que sube, humo con 4 formas iluminado por el sol y escombros con estela de polvo.",
                     description = "5 fases: bola de pinchos, onda expansiva, escombros, humo caliente toon y disipación lenta (80.lv).",
                     focus = Stations[1] + new Vector3(0f, 2.4f, 0f), yaw = 12f, pitch = 12f, distance = 17f,
                 },
                 new DemoController.Station
                 {
                     name = "Rayo Guardián", effect = guardian,
+                    variant = guardianV2,
+                    variantDescription = "V2: ojo azul que pasa a rosa, pitidos que aceleran, proyectil visible, tiras de energía grandes, aire caliente alrededor del rayo e impacto V2.",
                     description = "Láser de apuntado, carga, rayo con tiras de energía, lens flares e impacto con cámara lenta (80.lv).",
                     focus = Stations[2] + new Vector3(-4.2f, 2.6f, 3.6f), yaw = 42f, pitch = 10f, distance = 19f,
                 },
                 new DemoController.Station
                 {
                     name = "Flecha ancestral", effect = arrow,
+                    variant = arrowV2,
+                    variantDescription = "V2: el enemigo se disuelve y es absorbido, lente inclinada en 3D, distorsión que tira hacia el portal y estela con chispas.",
                     description = "Lente Sheikah con cáusticas, portal en UV polares que lo absorbe todo y colapso final (80.lv).",
                     focus = Stations[3] + new Vector3(-2.5f, 1.8f, 0f), yaw = 8f, pitch = 8f, distance = 14f,
                 },

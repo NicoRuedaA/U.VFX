@@ -20,6 +20,7 @@ namespace BotwVfx.EditorTools
             EnsureUrpSettings();
             BotwTextures.GenerateAll();
             BotwMeshes.GenerateAll();
+            BotwAudio.GenerateAll();
             AssetDatabase.SaveAssets();
             BotwMaterials.CreateAll();
             BotwEffects.BuildAll();
@@ -43,24 +44,32 @@ namespace BotwVfx.EditorTools
             AssetDatabase.SaveAssets();
         }
 
-        // El brillo de intersección necesita la Depth Texture, y el bloom necesita HDR.
+        // El brillo de intersección necesita la Depth Texture, el bloom HDR y la
+        // distorsión (V2) la Opaque Texture, a resolución completa para que no se vea borrosa.
         static void EnsureUrpSettings()
         {
             for (int i = 0; i < QualitySettings.count; i++)
             {
                 if (QualitySettings.GetRenderPipelineAssetAt(i) is UniversalRenderPipelineAsset urp)
-                {
-                    urp.supportsCameraDepthTexture = true;
-                    urp.supportsHDR = true;
-                    EditorUtility.SetDirty(urp);
-                }
+                    Configure(urp);
             }
             if (GraphicsSettings.defaultRenderPipeline is UniversalRenderPipelineAsset main)
+                Configure(main);
+        }
+
+        static void Configure(UniversalRenderPipelineAsset urp)
+        {
+            urp.supportsCameraDepthTexture = true;
+            urp.supportsCameraOpaqueTexture = true;
+            urp.supportsHDR = true;
+            var so = new SerializedObject(urp);
+            var downsampling = so.FindProperty("m_OpaqueDownsampling");
+            if (downsampling != null)
             {
-                main.supportsCameraDepthTexture = true;
-                main.supportsHDR = true;
-                EditorUtility.SetDirty(main);
+                downsampling.intValue = 0; // Downsampling.None
+                so.ApplyModifiedPropertiesWithoutUndo();
             }
+            EditorUtility.SetDirty(urp);
         }
 
         // Para línea de comandos: Unity.exe -batchmode -executeMethod BotwVfx.EditorTools.BotwVfxBuilder.BuildAllBatch -quit

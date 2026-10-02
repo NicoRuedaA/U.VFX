@@ -27,6 +27,121 @@ namespace BotwVfx.EditorTools
             Save("T_Gradient", 64, false, GradientTex);
             Save("T_SmokePuff", 256, false, SmokePuff);
             Save("T_SheikahRing", 512, false, SheikahRing);
+
+            // ---- V2
+            Save("T_SmokeAtlas", 512, false, SmokeAtlas);
+            SaveRamp("T_Ramp_Fire", new[] { 0f, 0.12f, 0.32f, 0.55f, 0.78f }, new[]
+            {
+                new Color(0.35f, 0.07f, 0.05f), new Color(0.85f, 0.18f, 0.06f), new Color(1f, 0.48f, 0.08f),
+                new Color(1f, 0.8f, 0.22f), new Color(1f, 0.97f, 0.78f),
+            });
+            SaveRamp("T_Ramp_Sheikah", new[] { 0f, 0.15f, 0.38f, 0.65f, 0.85f }, new[]
+            {
+                new Color(0.04f, 0.18f, 0.55f), new Color(0.07f, 0.45f, 1f), new Color(0.25f, 0.8f, 1f),
+                new Color(0.75f, 0.97f, 1f), Color.white,
+            });
+            SaveRamp("T_Ramp_Guardian", new[] { 0f, 0.15f, 0.38f, 0.65f, 0.85f }, new[]
+            {
+                new Color(0.4f, 0.03f, 0.3f), new Color(0.92f, 0.15f, 0.6f), new Color(1f, 0.45f, 0.82f),
+                new Color(1f, 0.82f, 0.96f), Color.white,
+            });
+        }
+
+        /// <summary>
+        /// Rampa en bandas duras (look toon). Los colores se dan en sRGB y se guardan en lineal,
+        /// porque el shader los multiplica por una intensidad HDR.
+        /// </summary>
+        static void SaveRamp(string name, float[] stops, Color[] srgb)
+        {
+            const int w = 256, h = 4;
+            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false, true);
+            var px = new Color[w * h];
+            for (int x = 0; x < w; x++)
+            {
+                float t = (x + 0.5f) / w;
+                int band = 0;
+                for (int i = 0; i < stops.Length; i++)
+                {
+                    if (t >= stops[i])
+                        band = i;
+                }
+                var c = srgb[band].linear;
+                for (int y = 0; y < h; y++)
+                    px[y * w + x] = c;
+            }
+            tex.SetPixels(px);
+            tex.Apply();
+            string path = $"{Folder}/{name}.png";
+            File.WriteAllBytes(path, tex.EncodeToPNG());
+            UnityEngine.Object.DestroyImmediate(tex);
+
+            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+            var importer = (TextureImporter)AssetImporter.GetAtPath(path);
+            importer.sRGBTexture = false;
+            importer.wrapMode = TextureWrapMode.Clamp;
+            importer.mipmapEnabled = false;
+            importer.filterMode = FilterMode.Bilinear;
+            importer.textureCompression = TextureImporterCompression.Uncompressed;
+            importer.npotScale = TextureImporterNPOTScale.None;
+            importer.SaveAndReimport();
+        }
+
+        // Atlas 2x2 de bolas de humo distintas. RG = normal, B = altura, A = máscara.
+        static Color[] SmokeAtlas(int n)
+        {
+            int tile = n / 2;
+            var px = new Color[n * n];
+            for (int t = 0; t < 4; t++)
+            {
+                var rng = new System.Random(100 + t * 17);
+                var bumps = RandomBumps(rng);
+                var height = new float[tile * tile];
+                for (int y = 0; y < tile; y++)
+                for (int x = 0; x < tile; x++)
+                {
+                    float u = (x + 0.5f) / tile, v = (y + 0.5f) / tile;
+                    float h = 0f;
+                    foreach (var bp in bumps)
+                    {
+                        float d2 = (u - bp.x) * (u - bp.x) + (v - bp.y) * (v - bp.y);
+                        if (d2 < bp.z * bp.z)
+                            h = Mathf.Max(h, Mathf.Sqrt(bp.z * bp.z - d2));
+                    }
+                    height[y * tile + x] = h;
+                }
+
+                int ox = t % 2 * tile, oy = t / 2 * tile;
+                float step = 1f / tile;
+                for (int y = 0; y < tile; y++)
+                for (int x = 0; x < tile; x++)
+                {
+                    float h = height[y * tile + x];
+                    float hx = (height[y * tile + Mathf.Min(x + 1, tile - 1)] - height[y * tile + Mathf.Max(x - 1, 0)]) / (2f * step);
+                    float hy = (height[Mathf.Min(y + 1, tile - 1) * tile + x] - height[Mathf.Max(y - 1, 0) * tile + x]) / (2f * step);
+                    var normal = h > 0f ? new Vector3(-hx, -hy, 1f).normalized : Vector3.forward;
+                    float mask = Mathf.Pow(Mathf.Clamp01(h / 0.24f), 0.65f);
+                    px[(oy + y) * n + ox + x] = new Color(normal.x * 0.5f + 0.5f, normal.y * 0.5f + 0.5f, Mathf.Clamp01(h / 0.28f), mask);
+                }
+            }
+            return px;
+        }
+
+        // Una bola grande más 5-8 más pequeñas alrededor, siempre dentro de la celda.
+        static Vector3[] RandomBumps(System.Random rng)
+        {
+            float R(float a, float b) => a + (float)rng.NextDouble() * (b - a);
+            int count = 5 + rng.Next(4);
+            var list = new Vector3[count + 1];
+            list[0] = new Vector3(0.5f + R(-0.03f, 0.03f), 0.47f + R(-0.03f, 0.03f), R(0.22f, 0.27f));
+            float start = R(0f, Mathf.PI * 2f);
+            for (int i = 1; i <= count; i++)
+            {
+                float a = start + i * Mathf.PI * 2f / count + R(-0.3f, 0.3f);
+                float r = R(0.12f, 0.18f);
+                float d = Mathf.Min(R(0.14f, 0.22f), 0.47f - r);
+                list[i] = new Vector3(0.5f + Mathf.Cos(a) * d, 0.48f + Mathf.Sin(a) * d * 0.9f, r);
+            }
+            return list;
         }
 
         public static Texture2D Load(string name) => AssetDatabase.LoadAssetAtPath<Texture2D>($"{Folder}/{name}.png");

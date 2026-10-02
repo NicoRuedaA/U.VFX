@@ -21,6 +21,7 @@ namespace BotwVfx.EditorTools
         public static Mesh Ring => Load("M_Ring");
         public static Mesh Arc => Load("M_Arc");
         public static Mesh Torus => Load("M_Torus");
+        public static Mesh ArcWide => Load("M_ArcWide");
 
         public static void GenerateAll()
         {
@@ -29,7 +30,8 @@ namespace BotwVfx.EditorTools
             SaveMesh("M_SpikyBall", BuildSpikyBall());
             SaveMesh("M_Rock", BuildRock(7));
             SaveMesh("M_Ring", BuildRing(0.55f, 1f, 64));
-            SaveMesh("M_Arc", BuildArc());
+            SaveMesh("M_Arc", BuildArc(Mathf.PI * 4f / 3f, 0.22f, 0.5f));
+            SaveMesh("M_ArcWide", BuildArc(Mathf.PI * 1.5f, 0.42f, 0.9f));
             SaveMesh("M_Torus", BuildTorus(1f, 0.08f, 48, 8));
         }
 
@@ -231,12 +233,9 @@ namespace BotwVfx.EditorTools
 
         // Tira curva alrededor del eje Z (las "energy stripes" del rayo Guardián).
         // UV.x = a lo largo del arco, UV.y = a lo ancho.
-        static Mesh BuildArc()
+        static Mesh BuildArc(float arc, float width, float helix)
         {
             const int segments = 40;
-            const float arc = Mathf.PI * 4f / 3f;
-            const float width = 0.22f;
-            const float helix = 0.5f;
             var positions = new List<Vector3>();
             var uvs = new List<Vector2>();
             var colors = new List<Color32>();

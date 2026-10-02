@@ -346,6 +346,63 @@ namespace BotwVfx.EditorTools
             return this;
         }
 
+        /// <summary>Atlas X×Y: cada partícula usa un fotograma aleatorio fijo (variedad de formas).</summary>
+        public Fx RandomFrame(int tilesX, int tilesY)
+        {
+            var ts = ps.textureSheetAnimation;
+            ts.enabled = true;
+            ts.mode = ParticleSystemAnimationMode.Grid;
+            ts.numTilesX = tilesX;
+            ts.numTilesY = tilesY;
+            ts.animation = ParticleSystemAnimationType.WholeSheet;
+            ts.cycleCount = 1;
+            // frameOverTime está normalizado (0..1 = toda la hoja); en modo "dos constantes"
+            // cada partícula saca un valor aleatorio que se mantiene toda su vida.
+            ts.frameOverTime = new MinMaxCurve(0f, 0.999f);
+            return this;
+        }
+
+        /// <summary>Estela por partícula. El alpha de la estela va de 1 a 0 (con erosión: cola que se deshace).</summary>
+        public Fx Trails(Material material, float lifetimeRatio, float width)
+        {
+            var tr = ps.trails;
+            tr.enabled = true;
+            tr.mode = ParticleSystemTrailMode.PerParticle;
+            tr.ratio = 1f;
+            tr.lifetime = lifetimeRatio;
+            tr.minVertexDistance = 0.08f;
+            tr.dieWithParticles = true;
+            tr.sizeAffectsWidth = true;
+            tr.widthOverTrail = new MinMaxCurve(width, C(0f, 1f, 1f, 0.3f));
+            tr.inheritParticleColor = false;
+            var g = new Gradient();
+            g.SetKeys(
+                new[] { new GradientColorKey(UnityEngine.Color.white, 0f), new GradientColorKey(UnityEngine.Color.white, 1f) },
+                new[] { new GradientAlphaKey(1f, 0f), new GradientAlphaKey(0f, 1f) });
+            tr.colorOverTrail = new ParticleSystem.MinMaxGradient(g);
+            tr.textureMode = ParticleSystemTrailTextureMode.Stretch;
+            renderer.trailMaterial = material;
+            return this;
+        }
+
+        /// <summary>Color sobre la vida a partir de pares (tiempo, color); alpha = 1.</summary>
+        public Fx ColorKeys(params (float time, UnityEngine.Color color)[] keys)
+        {
+            var colorKeys = new GradientColorKey[keys.Length];
+            for (int i = 0; i < keys.Length; i++)
+                colorKeys[i] = new GradientColorKey(keys[i].color, keys[i].time);
+            var g = new Gradient();
+            g.SetKeys(colorKeys, new[] { new GradientAlphaKey(1f, 0f), new GradientAlphaKey(1f, 0.92f), new GradientAlphaKey(0f, 1f) });
+            return ColorOverLife(g);
+        }
+
+        public Fx RateOverDistance(float perMeter)
+        {
+            var e = ps.emission;
+            e.rateOverDistance = perMeter;
+            return this;
+        }
+
         // ------------------------------------------------------------ render
 
         public Fx Stretch(float lengthScale, float velocityScale = 0f)

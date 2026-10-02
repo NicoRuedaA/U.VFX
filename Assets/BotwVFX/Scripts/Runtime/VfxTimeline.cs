@@ -49,6 +49,27 @@ namespace BotwVfx
             [NonSerialized] public bool fired;
         }
 
+        [Serializable]
+        public class FlashCue
+        {
+            public float time;
+            public Color color = Color.white;
+            [Range(0f, 1f)] public float intensity = 0.5f;
+            [Tooltip("Duración en segundos reales (sin escalar).")]
+            public float duration = 0.12f;
+            [NonSerialized] public bool fired;
+        }
+
+        [Serializable]
+        public class AudioCue
+        {
+            public AudioClip clip;
+            public float time;
+            [Range(0f, 1f)] public float volume = 1f;
+            public float pitchJitter = 0.04f;
+            [NonSerialized] public bool fired;
+        }
+
         [Header("Timeline")]
         public float duration = 3f;
         public bool playOnStart;
@@ -60,6 +81,8 @@ namespace BotwVfx
         public List<TimelineCue> subEffects = new List<TimelineCue>();
         public List<ShakeCue> shakes = new List<ShakeCue>();
         public List<SlowMotionCue> slowMotion = new List<SlowMotionCue>();
+        public List<FlashCue> screenFlashes = new List<FlashCue>();
+        public List<AudioCue> sounds = new List<AudioCue>();
 
         [Header("Flash de luz")]
         public Light flashLight;
@@ -111,6 +134,8 @@ namespace BotwVfx
             }
             foreach (var cue in shakes) cue.fired = false;
             foreach (var cue in slowMotion) cue.fired = false;
+            foreach (var cue in screenFlashes) cue.fired = false;
+            foreach (var cue in sounds) cue.fired = false;
             Evaluate(-1f);
             ApplyLight(-1f);
         }
@@ -180,6 +205,23 @@ namespace BotwVfx
                 {
                     cue.fired = true;
                     VfxDirector.SlowMotion(cue.timeScale, cue.duration);
+                }
+            }
+            foreach (var cue in screenFlashes)
+            {
+                if (!cue.fired && t >= cue.time)
+                {
+                    cue.fired = true;
+                    VfxDirector.Flash(cue.color, cue.intensity, cue.duration);
+                }
+            }
+            foreach (var cue in sounds)
+            {
+                if (!cue.fired && t >= cue.time)
+                {
+                    cue.fired = true;
+                    if (cue.clip != null)
+                        VfxDirector.PlaySound(cue.clip, transform.position, cue.volume, 1f + UnityEngine.Random.Range(-cue.pitchJitter, cue.pitchJitter));
                 }
             }
         }

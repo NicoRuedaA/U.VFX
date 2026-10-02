@@ -5,8 +5,10 @@ using UnityEngine.InputSystem;
 namespace BotwVfx
 {
     /// <summary>
-    /// Escena de demostración: cada "estación" tiene un efecto y un encuadre.
-    /// 1-4 lanzan los efectos, Espacio repite, clic derecho orbita, rueda = zoom.
+    /// Escena de demostración: cada "estación" tiene un efecto original, su variación
+    /// (V2) en el mismo sitio y un encuadre.
+    /// 1-4 lanzan los efectos, V alterna original/variación, C los compara seguidos,
+    /// Espacio repite, clic derecho orbita, rueda = zoom, M silencia.
     /// </summary>
     public class DemoController : MonoBehaviour
     {
@@ -16,14 +18,20 @@ namespace BotwVfx
             public string name;
             [TextArea] public string description;
             public VfxTimeline effect;
+            [TextArea] public string variantDescription;
+            public VfxTimeline variant;
             public Vector3 focus;
             public float yaw;
             public float pitch = 12f;
             public float distance = 14f;
+
+            public VfxTimeline Get(bool useVariant) => useVariant && variant != null ? variant : effect;
         }
 
         public Camera targetCamera;
         public Station[] stations = Array.Empty<Station>();
+        [Tooltip("Mostrar la variación (V2) en lugar del original.")]
+        public bool showVariant = true;
         public bool autoPlay;
         public float autoDelay = 1.2f;
         [Range(0.05f, 1f)] public float slowMotionSpeed = 0.25f;
@@ -35,8 +43,12 @@ namespace BotwVfx
         Vector3 goalPivot;
         bool slowMotion;
         float autoTimer = -1f;
+        int compareStage;
+        float compareTimer;
         GUIStyle panelStyle, titleStyle, labelStyle, buttonStyle, activeButtonStyle, hintStyle;
         Texture2D panelTex, buttonTex, activeTex;
+
+        VfxTimeline CurrentEffect => stations.Length > 0 ? stations[current].Get(showVariant) : null;
 
         void Start()
         {
@@ -44,6 +56,7 @@ namespace BotwVfx
                 targetCamera = Camera.main;
             if (stations.Length == 0)
                 return;
+            ApplyVersion();
             Select(0, snap: true);
             Play(0);
         }
@@ -60,6 +73,12 @@ namespace BotwVfx
                 }
                 if (kb.spaceKey.wasPressedThisFrame || kb.rKey.wasPressedThisFrame)
                     Play(current);
+                if (kb.vKey.wasPressedThisFrame)
+                    SetVersion(!showVariant);
+                if (kb.cKey.wasPressedThisFrame)
+                    StartCompare();
+                if (kb.mKey.wasPressedThisFrame && VfxDirector.Instance != null)
+                    VfxDirector.Instance.muted = !VfxDirector.Instance.muted;
                 if (kb.tKey.wasPressedThisFrame)
                     slowMotion = !slowMotion;
                 if (kb.aKey.wasPressedThisFrame)
@@ -88,10 +107,21 @@ namespace BotwVfx
             if (director != null)
                 director.baseTimeScale = slowMotion ? slowMotionSpeed : 1f;
 
-            // Modo automático: cuando termina un efecto pasa al siguiente.
-            if (autoPlay && stations.Length > 0)
+            // Comparación: original y, al terminar, la variación.
+            if (compareStage == 1 && CurrentEffect != null && !CurrentEffect.IsPlaying)
             {
-                var fx = stations[current].effect;
+                compareTimer += Time.unscaledDeltaTime;
+                if (compareTimer > 0.6f)
+                {
+                    compareStage = 0;
+                    SetVersion(true);
+                }
+            }
+
+            // Modo automático: cuando termina un efecto pasa al siguiente.
+            if (autoPlay && compareStage == 0 && stations.Length > 0)
+            {
+                var fx = CurrentEffect;
                 if (fx != null && !fx.IsPlaying)
                 {
                     if (autoTimer < 0f)
@@ -125,7 +155,41 @@ namespace BotwVfx
             if (index != current)
                 Select(index, snap: false);
             autoTimer = -1f;
-            stations[index].effect?.Play();
+            var fx = stations[index].Get(showVariant);
+            if (fx != null)
+                fx.Play();
+        }
+
+        public void SetVersion(bool variant)
+        {
+            showVariant = variant;
+            ApplyVersion();
+            Play(current);
+        }
+
+        public void StartCompare()
+        {
+            compareStage = 1;
+            compareTimer = 0f;
+            SetVersion(false);
+        }
+
+        // Solo una de las dos versiones está activa (así no se ven dos bombas o dos enemigos).
+        void ApplyVersion()
+        {
+            foreach (var s in stations)
+            {
+                var active = s.Get(showVariant);
+                foreach (var fx in new[] { s.effect, s.variant })
+                {
+                    if (fx == null)
+                        continue;
+                    bool on = fx == active;
+                    if (!on && fx.gameObject.activeSelf)
+                        fx.StopAndClear();
+                    fx.gameObject.SetActive(on);
+                }
+            }
         }
 
         void Select(int index, bool snap)
@@ -162,8 +226,8 @@ namespace BotwVfx
             float scale = Mathf.Max(1f, Screen.height / 1080f);
             GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1f));
 
-            const float width = 330f;
-            float height = 150f + stations.Length * 40f + 110f;
+            const float width = 340f;
+            float height = 230f + stations.Length * 40f + 110f;
             GUILayout.BeginArea(new Rect(16f, 16f, width, height), panelStyle);
             GUILayout.Label("BotW VFX", titleStyle);
             GUILayout.Label("Efectos estilo Breath of the Wild", hintStyle);
@@ -177,7 +241,18 @@ namespace BotwVfx
             }
 
             GUILayout.Space(8f);
-            var desc = stations[current].description;
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Original", showVariant ? buttonStyle : activeButtonStyle, GUILayout.Height(28f)))
+                SetVersion(false);
+            if (GUILayout.Button("Variación", showVariant ? activeButtonStyle : buttonStyle, GUILayout.Height(28f)))
+                SetVersion(true);
+            if (GUILayout.Button("Comparar", compareStage > 0 ? activeButtonStyle : buttonStyle, GUILayout.Height(28f)))
+                StartCompare();
+            GUILayout.EndHorizontal();
+
+            GUILayout.Space(6f);
+            var s = stations[current];
+            var desc = showVariant && s.variant != null ? s.variantDescription : s.description;
             if (!string.IsNullOrEmpty(desc))
                 GUILayout.Label(desc, labelStyle);
 
@@ -185,8 +260,11 @@ namespace BotwVfx
             GUILayout.BeginHorizontal();
             autoPlay = GUILayout.Toggle(autoPlay, " Auto (A)", labelStyle);
             slowMotion = GUILayout.Toggle(slowMotion, $" Lento x{slowMotionSpeed:0.##} (T)", labelStyle);
+            var director = VfxDirector.Instance;
+            if (director != null)
+                director.muted = !GUILayout.Toggle(!director.muted, " Sonido (M)", labelStyle);
             GUILayout.EndHorizontal();
-            GUILayout.Label("Espacio: repetir · Clic dcho: orbitar · Rueda: zoom", hintStyle);
+            GUILayout.Label("V: original/variación · C: comparar · Espacio: repetir\nClic dcho: orbitar · Rueda: zoom", hintStyle);
             GUILayout.EndArea();
         }
 

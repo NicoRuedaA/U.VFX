@@ -37,6 +37,15 @@ namespace BotwVfx
         [Header("Tiras de energía (se alinean con el rayo)")]
         public ParticleSystem stripes;
 
+        [Header("Opcional (V2)")]
+        [Tooltip("Cabeza del proyectil: se ve mientras el disparo viaja hacia el objetivo.")]
+        public Transform projectileHead;
+        [Tooltip("Malla con el shader de distorsión que envuelve al rayo (aire caliente).")]
+        public Renderer beamHeat;
+        public float heatScale = 3f;
+
+        MeshRenderer[] headRenderers;
+
         protected override void Evaluate(float t)
         {
             if (eye == null || target == null)
@@ -78,13 +87,25 @@ namespace BotwVfx
             bool beamOn = t >= 0f && bt >= 0f && t < beamEnd;
             SetVisible(beamCore, beamOn);
             SetVisible(beamGlow, beamOn);
+            SetVisible(beamHeat, beamOn);
+            float travel = travelTime > 0f ? Mathf.Clamp01(bt / travelTime) : 1f;
             if (beamOn)
             {
-                float k = travelTime > 0f ? Mathf.Clamp01(bt / travelTime) : 1f;
-                Vector3 tip = Vector3.Lerp(a, b, k);
+                Vector3 tip = Vector3.Lerp(a, b, travel);
                 float w = beamWidth.Evaluate(bt) * (1f + 0.12f * Mathf.Sin(t * 95f));
                 PlaceBeam(beamCore, a, tip, w);
                 PlaceBeam(beamGlow, a, tip, w * glowScale);
+                PlaceBeam(beamHeat, a, tip, Mathf.Max(w, 0.2f) * heatScale);
+            }
+
+            if (projectileHead != null)
+            {
+                // Solo se ocultan las mallas: las partículas hijas (estela) siguen vivas.
+                bool flying = t >= 0f && bt >= 0f && bt <= travelTime + 0.02f;
+                headRenderers ??= projectileHead.GetComponentsInChildren<MeshRenderer>(true);
+                foreach (var r in headRenderers)
+                    SetVisible(r, flying);
+                projectileHead.position = bt >= 0f ? Vector3.Lerp(a, b, travel) : a;
             }
 
             // --- Emisor de tiras: una línea del ojo al objetivo ---

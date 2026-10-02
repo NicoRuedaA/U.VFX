@@ -22,17 +22,20 @@ namespace BotwVfx.EditorTools
         struct Shot
         {
             public int station;
+            public bool variant;
             public float effectTime;
             public string name;
         }
 
         static readonly Shot[] Shots =
         {
-            new Shot { station = 0, effectTime = 0.25f, name = "play_bomb" },
-            new Shot { station = 1, effectTime = 0.45f, name = "play_explosion" },
-            new Shot { station = 2, effectTime = 2.2f, name = "play_guardian_charge" },
-            new Shot { station = 2, effectTime = 2.84f, name = "play_guardian_impact" },
-            new Shot { station = 3, effectTime = 0.9f, name = "play_arrow" },
+            new Shot { station = 0, variant = false, effectTime = 0.25f, name = "play_bomb" },
+            new Shot { station = 0, variant = true, effectTime = 0.25f, name = "play_bomb_v2" },
+            new Shot { station = 1, variant = true, effectTime = 0.45f, name = "play_explosion_v2" },
+            new Shot { station = 2, variant = true, effectTime = 2.2f, name = "play_guardian_v2_charge" },
+            new Shot { station = 2, variant = true, effectTime = 2.84f, name = "play_guardian_v2_projectile" },
+            new Shot { station = 2, variant = true, effectTime = 3.0f, name = "play_guardian_v2_impact" },
+            new Shot { station = 3, variant = true, effectTime = 0.9f, name = "play_arrow_v2" },
         };
 
         static readonly List<string> problems = new List<string>();
@@ -99,12 +102,14 @@ namespace BotwVfx.EditorTools
             }
 
             var shot = Shots[shotIndex];
-            var fx = demo.stations[shot.station].effect;
+            var fx = demo.stations[shot.station].Get(shot.variant);
             switch (phase)
             {
                 case 0: // seleccionar estación y dejar que la cámara llegue
-                    if (shotIndex == 0 || Shots[shotIndex - 1].station != shot.station)
+                    if (shotIndex == 0 || Shots[shotIndex - 1].station != shot.station || Shots[shotIndex - 1].variant != shot.variant)
                     {
+                        if (demo.showVariant != shot.variant)
+                            demo.SetVersion(shot.variant);
                         demo.Play(shot.station);
                         phase = 1;
                         phaseStart = now;

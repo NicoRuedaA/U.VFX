@@ -11,7 +11,7 @@ namespace BotwVfx.EditorTools
     /// anticipación -> pico muy rápido -> disipación lenta.
     /// Escala de referencia: 1 unidad = 1 metro (Link mide ~1,7).
     /// </summary>
-    public static class BotwEffects
+    public static partial class BotwEffects
     {
         public const string Folder = "Assets/BotwVFX/Prefabs";
 
@@ -31,6 +31,7 @@ namespace BotwVfx.EditorTools
             Save(BuildExplosion(), ExplosionPath);
             Save(BuildGuardianBeam(), GuardianBeamPath);
             Save(BuildAncientArrow(), AncientArrowPath);
+            BuildAllV2();
         }
 
         static void Save(GameObject go, string path)

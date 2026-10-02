@@ -51,23 +51,46 @@ namespace BotwVfx.EditorTools
             }
         }
 
+        // V2: el Guardián impacta más tarde (el proyectil tarda 0,22 s en llegar).
+        static readonly float[][] TimesV2 =
+        {
+            new[] { 0.02f, 0.06f, 0.12f, 0.25f, 0.45f, 0.7f },
+            new[] { 0.03f, 0.1f, 0.2f, 0.4f, 0.9f, 2f },
+            new[] { 1f, 2.2f, 2.8f, 2.94f, 3.06f, 3.56f },
+            new[] { 0.12f, 0.3f, 0.5f, 0.9f, 1.3f, 1.45f },
+        };
+
+        // Comparativa: 4 instantes equivalentes de cada versión (fila de arriba original, abajo V2).
+        static readonly float[][] CompareOriginal =
+        {
+            new[] { 0.04f, 0.12f, 0.3f, 0.6f },
+            new[] { 0.08f, 0.25f, 0.6f, 1.6f },
+            new[] { 2.2f, 2.74f, 2.84f, 3.4f },
+            new[] { 0.3f, 0.6f, 1f, 1.42f },
+        };
+
+        static readonly float[][] CompareVariant =
+        {
+            new[] { 0.04f, 0.12f, 0.3f, 0.6f },
+            new[] { 0.08f, 0.25f, 0.6f, 1.6f },
+            new[] { 2.2f, 2.82f, 3f, 3.56f },
+            new[] { 0.3f, 0.6f, 1f, 1.42f },
+        };
+
         static void CaptureAll(string dir)
         {
             Directory.CreateDirectory(dir);
             EditorSceneManager.OpenScene(BotwScene.ScenePath);
             var demo = Object.FindAnyObjectByType<DemoController>();
             var cam = demo.targetCamera;
-            var timelines = Object.FindObjectsByType<VfxTimeline>();
-            var facers = Object.FindObjectsByType<FaceCamera>();
             var rt = new RenderTexture(Width, Height, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
             var frame = new Texture2D(Width, Height, TextureFormat.RGB24, false);
 
             try
             {
-                // Vista general en reposo (2x2).
+                // Vista general en reposo (2x2), con las variaciones activas.
                 var overview = new Texture2D(Width * 2, Height * 2, TextureFormat.RGB24, false);
-                foreach (var t in timelines)
-                    t.Preview(-1f);
+                ShowVersion(demo, true);
                 for (int i = 0; i < demo.stations.Length && i < 4; i++)
                 {
                     DemoController.PoseCamera(cam, demo.stations[i]);
@@ -79,22 +102,47 @@ namespace BotwVfx.EditorTools
                 for (int i = 0; i < demo.stations.Length && i < Times.Length; i++)
                 {
                     var station = demo.stations[i];
-                    var sheet = new Texture2D(Width * 3, Height * 2, TextureFormat.RGB24, false);
-                    foreach (var t in timelines)
-                        t.Preview(-1f);
                     DemoController.PoseCamera(cam, station);
-                    for (int k = 0; k < 6; k++)
+                    string baseName = $"{i + 1}_{Sanitize(station.name)}";
+
+                    // Hojas de 6 instantes de cada versión.
+                    foreach (bool variant in new[] { false, true })
                     {
-                        station.effect.Preview(Times[i][k]);
-                        foreach (var f in facers)
-                            f.Face(cam.transform.position);
-                        Render(cam, rt, frame);
-                        sheet.SetPixels(k % 3 * Width, (1 - k / 3) * Height, Width, Height, frame.GetPixels());
+                        if (variant && station.variant == null)
+                            continue;
+                        ShowVersion(demo, variant);
+                        var fx = station.Get(variant);
+                        var times = variant ? TimesV2[i] : Times[i];
+                        var sheet = new Texture2D(Width * 3, Height * 2, TextureFormat.RGB24, false);
+                        for (int k = 0; k < 6; k++)
+                        {
+                            RenderAt(fx, times[k], cam, rt, frame);
+                            sheet.SetPixels(k % 3 * Width, (1 - k / 3) * Height, Width, Height, frame.GetPixels());
+                        }
+                        fx.Preview(-1f);
+                        Save(sheet, Path.Combine(dir, baseName + (variant ? "_V2.png" : ".png")));
                     }
-                    station.effect.Preview(-1f);
-                    string file = Path.Combine(dir, $"{i + 1}_{Sanitize(station.name)}.png");
-                    Save(sheet, file);
-                    Debug.Log($"[BotW VFX] Captura: {file}");
+
+                    // Comparativa original (arriba) vs. variación (abajo).
+                    if (station.variant != null)
+                    {
+                        var compare = new Texture2D(Width * 4, Height * 2, TextureFormat.RGB24, false);
+                        for (int row = 0; row < 2; row++)
+                        {
+                            bool variant = row == 1;
+                            ShowVersion(demo, variant);
+                            var fx = station.Get(variant);
+                            var times = variant ? CompareVariant[i] : CompareOriginal[i];
+                            for (int k = 0; k < 4; k++)
+                            {
+                                RenderAt(fx, times[k], cam, rt, frame);
+                                compare.SetPixels(k * Width, (1 - row) * Height, Width, Height, frame.GetPixels());
+                            }
+                            fx.Preview(-1f);
+                        }
+                        Save(compare, Path.Combine(dir, baseName + "_compare.png"));
+                    }
+                    Debug.Log($"[BotW VFX] Capturas: {baseName}");
                 }
             }
             finally
@@ -104,6 +152,31 @@ namespace BotwVfx.EditorTools
                 Object.DestroyImmediate(rt);
                 Object.DestroyImmediate(frame);
             }
+        }
+
+        // Activa solo una versión en todas las estaciones (como hace la demo con la tecla V).
+        static void ShowVersion(DemoController demo, bool variant)
+        {
+            foreach (var s in demo.stations)
+            {
+                foreach (var fx in new[] { s.effect, s.variant })
+                {
+                    if (fx == null)
+                        continue;
+                    bool on = fx == s.Get(variant);
+                    fx.gameObject.SetActive(on);
+                    if (on)
+                        fx.Preview(-1f);
+                }
+            }
+        }
+
+        static void RenderAt(VfxTimeline fx, float time, Camera cam, RenderTexture rt, Texture2D frame)
+        {
+            fx.Preview(time);
+            foreach (var f in Object.FindObjectsByType<FaceCamera>())
+                f.Face(cam.transform.position);
+            Render(cam, rt, frame);
         }
 
         // Depuración: una estación y un instante, renderizados con cada modo de _BotwDebugMode.
@@ -118,10 +191,21 @@ namespace BotwVfx.EditorTools
                 EditorSceneManager.OpenScene(BotwScene.ScenePath);
                 var demo = Object.FindAnyObjectByType<DemoController>();
                 var cam = demo.targetCamera;
-                foreach (var t in Object.FindObjectsByType<VfxTimeline>())
-                    t.Preview(-1f);
+                bool variant = GetArg("-variant") == "1";
+                // -distortScale N: exagera la distorsión para comprobar que funciona (no se guarda).
+                float distortScale = float.Parse(GetArg("-distortScale") ?? "1", System.Globalization.CultureInfo.InvariantCulture);
+                if (distortScale != 1f)
+                {
+                    foreach (var guid in AssetDatabase.FindAssets("t:Material", new[] { BotwMaterials.Folder }))
+                    {
+                        var m = AssetDatabase.LoadAssetAtPath<Material>(AssetDatabase.GUIDToAssetPath(guid));
+                        if (m.shader.name == "BotwVFX/Distortion")
+                            m.SetFloat("_Strength", m.GetFloat("_Strength") * distortScale);
+                    }
+                }
+                ShowVersion(demo, variant);
                 DemoController.PoseCamera(cam, demo.stations[station]);
-                demo.stations[station].effect.Preview(time);
+                demo.stations[station].Get(variant).Preview(time);
                 foreach (var f in Object.FindObjectsByType<FaceCamera>())
                     f.Face(cam.transform.position);
                 var rt = new RenderTexture(Width, Height, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);

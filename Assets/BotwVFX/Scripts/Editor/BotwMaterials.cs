@@ -13,7 +13,7 @@ namespace BotwVfx.EditorTools
     /// fácil de conseguir el look "plano pero brillante" de BotW: núcleo casi blanco,
     /// borde de color puro y halo de bloom del mismo tono.
     /// </summary>
-    public static class BotwMaterials
+    public static partial class BotwMaterials
     {
         public const string Folder = "Assets/BotwVFX/Materials";
 
@@ -173,6 +173,7 @@ namespace BotwVfx.EditorTools
             Toon("AA_Mote", star, SheikahCore, SheikahEdge, 0.25f);
             Toon("AA_Shock", ring, SheikahCore, SheikahEdge, 0.3f, noise, 0.5f, tiling: new Vector2(3f, 3f)).SetFloat("_Erosion", 0.2f);
 
+            CreateV2();
             AssetDatabase.SaveAssets();
         }
 
