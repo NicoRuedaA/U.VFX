@@ -13,7 +13,7 @@ namespace BotwVfx.EditorTools
     /// fácil de conseguir el look "plano pero brillante" de BotW: núcleo casi blanco,
     /// borde de color puro y halo de bloom del mismo tono.
     /// </summary>
-    public static partial class BotwMaterials
+    public static class BotwMaterials
     {
         public const string Folder = "Assets/BotwVFX/Materials";
 
@@ -148,9 +148,6 @@ namespace BotwVfx.EditorTools
             Toon("GB_Spark", ray, GuardianCore, GuardianEdge, 0.35f);
             Toon("GB_Ring", ring, GuardianCore, GuardianEdge, 0.3f, noise, 0.4f, tiling: new Vector2(3f, 3f));
             Toon("GB_Dot", star, new Color(3f, 0.35f, 0.9f), new Color(1.5f, 0.03f, 0.2f), 0.3f);
-            var eyeGlow = Toon("GB_EyeGlow", circle, GuardianCore, GuardianEdge, 0.3f, noise, 0.3f,
-                tiling: new Vector2(2f, 2f), scroll: new Vector2(0f, 0.8f));
-            eyeGlow.SetFloat("_CameraOffset", 0.3f);
             var eyeLens = Toon("GB_EyeLens", null, new Color(2.2f, 0.4f, 1.3f), new Color(2.2f, 0.4f, 1.3f), 0f);
             eyeLens.SetFloat("_AlphaErosion", 0f);
 
@@ -173,13 +170,79 @@ namespace BotwVfx.EditorTools
             Toon("AA_Mote", star, SheikahCore, SheikahEdge, 0.25f);
             Toon("AA_Shock", ring, SheikahCore, SheikahEdge, 0.3f, noise, 0.5f, tiling: new Vector2(3f, 3f)).SetFloat("_Erosion", 0.2f);
 
-            CreateV2();
             AssetDatabase.SaveAssets();
+        }
+
+        // ------------------------------------------------------------ Emerald
+        // Materiales de los movimientos Emerald (los usa EmeraldMoves, no "Rebuild Everything").
+
+        const string EmeraldShader = "BotwVFX/Emerald Toon";
+
+        /// <summary>Material de la animación horneada y materiales compartidos por todos los tipos.</summary>
+        public static void CreateEmeraldShared()
+        {
+            Directory.CreateDirectory(Folder);
+            var noise = BotwTextures.Load("T_Noise");
+            var ray = BotwTextures.Load("T_Ray");
+            var ring = BotwTextures.Load("T_Ring");
+            var puff = BotwTextures.Load("T_SmokePuff");
+
+            // Animación horneada: el reproductor fija _Color/_Mode/_Cull/_ZWrite/_ZTest; aquí solo el estilo.
+            var toon = Mat("EM_Toon", EmeraldShader);
+            toon.SetFloat("_EmissionBoost", 1.6f);
+            toon.SetFloat("_CoreBoost", 1.4f);
+            toon.SetFloat("_BodyMax", 1.2f);
+            toon.SetFloat("_CoreWhite", 0.9f);
+            toon.SetFloat("_Saturation", 1.5f);
+            toon.SetFloat("_NoiseScale", 2.2f);
+            toon.SetFloat("_NoiseSpeed", 1.8f);
+            toon.SetFloat("_NoiseAmount", 0.5f);
+            toon.SetFloat("_EdgeErosion", 0.08f);
+            toon.SetFloat("_AlphaErosion", 0.35f);
+            toon.SetFloat("_IntersectionDistance", 0.3f);
+            toon.SetFloat("_IntersectionStrength", 0.8f);
+            toon.SetColor("_ShadowColor", new Color(0.55f, 0.62f, 0.8f, 1f)); // como MAT_* (Toon Lit)
+            toon.SetColor("_RimColor", new Color(1f, 0.93f, 0.78f, 0.35f));
+
+            Smoke("EM_Dust", puff, new Color(0.93f, 0.88f, 0.78f), new Color(0.72f, 0.64f, 0.52f), fireErosion: 1f, cutout: 0.5f);
+            Smoke("EM_Mist", puff, new Color(0.88f, 0.95f, 1f), new Color(0.55f, 0.7f, 0.86f), fireErosion: 1f, cutout: 0.5f);
+            Smoke("EM_PoisonSmoke", puff, new Color(0.7f, 0.5f, 0.82f), new Color(0.38f, 0.2f, 0.5f), fireErosion: 1f, cutout: 0.5f);
+            Smoke("EM_GhostSmoke", puff, new Color(0.45f, 0.36f, 0.62f), new Color(0.18f, 0.12f, 0.3f), fireErosion: 1f, cutout: 0.5f);
+
+            var leaf = Toon("EM_Leaf", ray, new Color(0.9f, 1.8f, 0.45f), new Color(0.08f, 0.55f, 0.06f), 0.45f);
+            leaf.SetFloat("_ShadeAmount", 0f);
+            var shard = Toon("EM_IceShard", null, new Color(1.3f, 2f, 2.4f), new Color(1.3f, 2f, 2.4f), 0f);
+            shard.SetFloat("_AlphaErosion", 0f);
+            shard.SetFloat("_ShadeAmount", 0.45f);
+            shard.SetFloat("_ZWrite", 1f);
+            Toon("EM_Bubble", ring, new Color(2f, 1.2f, 2.4f), new Color(0.8f, 0.1f, 1.2f), 0.3f, noise, 0.3f);
+            Toon("EM_Wind", ray, new Color(1.9f, 2.1f, 2.2f), new Color(0.6f, 1.1f, 1.6f), 0.35f, noise, 0.25f);
+        }
+
+        /// <summary>
+        /// Juego de materiales de un tipo (EM_&lt;tipo&gt;_Spark/Star/Glow/Shock) con su paleta HDR lineal:
+        /// núcleo casi blanco y borde saturado, como el resto de efectos BotW.
+        /// </summary>
+        public static void CreateEmeraldType(string key, Color core, Color edge)
+        {
+            var noise = BotwTextures.Load("T_Noise");
+            var circle = BotwTextures.Load("T_SoftCircle");
+            var ray = BotwTextures.Load("T_Ray");
+            var star = BotwTextures.Load("T_Star");
+
+            Toon($"EM_{key}_Spark", ray, core, edge, 0.35f);
+            Toon($"EM_{key}_Star", star, core, edge, 0.25f).SetFloat("_CameraOffset", 1f);
+            var glow = Toon($"EM_{key}_Glow", circle, core, edge, 0.3f, noise, 0.4f,
+                tiling: new Vector2(2f, 2f), scroll: new Vector2(0f, 1.2f));
+            glow.SetFloat("_CameraOffset", 0.8f);
+            var shock = Toon($"EM_{key}_Shock", null, core, edge, 0.35f, noise, 0.55f,
+                tiling: new Vector2(6f, 1f), scroll: new Vector2(0.2f, 0f));
+            shock.SetVector("_BorderFade", new Vector4(0f, 0.5f, 0f, 0f));
         }
 
         // ------------------------------------------------------------ helpers
 
-        static Material Mat(string name, string shaderName)
+        internal static Material Mat(string name, string shaderName)
         {
             var shader = Shader.Find(shaderName);
             if (shader == null)
@@ -200,11 +263,11 @@ namespace BotwVfx.EditorTools
         }
 
         /// <summary>Asigna un color lineal/HDR (SetColor espera el valor en gamma en proyectos lineales).</summary>
-        static void Hdr(Material m, string prop, Color linear) => m.SetColor(prop, linear.gamma);
+        internal static void Hdr(Material m, string prop, Color linear) => m.SetColor(prop, linear.gamma);
 
-        static Color Lin(float r, float g, float b) => new Color(r, g, b).linear;
+        internal static Color Lin(float r, float g, float b) => new Color(r, g, b).linear;
 
-        static Material Toon(string name, Texture mainTex, Color color, Color edge, float edgeWidth,
+        internal static Material Toon(string name, Texture mainTex, Color color, Color edge, float edgeWidth,
             Texture noise = null, float noiseStrength = 0f, Vector2? tiling = null, Vector2? scroll = null, bool additive = false)
         {
             var m = Mat(name, ToonShader);
@@ -240,7 +303,7 @@ namespace BotwVfx.EditorTools
             m.EnableKeyword("_POLAR_ON");
         }
 
-        static void Smoke(string name, Texture puff, Color light, Color shadow, float fireErosion, float cutout)
+        internal static Material Smoke(string name, Texture puff, Color light, Color shadow, float fireErosion, float cutout)
         {
             var m = Mat(name, SmokeShader);
             m.SetTexture("_SmokeTex", puff);
@@ -253,6 +316,7 @@ namespace BotwVfx.EditorTools
             m.SetFloat("_ShadeCutout", cutout);
             m.SetFloat("_NoiseAmount", 0.35f);
             m.SetFloat("_ErosionStrength", 0.6f);
+            return m;
         }
 
         static void Lit(string name, Color color)

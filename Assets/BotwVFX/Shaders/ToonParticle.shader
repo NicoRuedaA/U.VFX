@@ -36,11 +36,6 @@ Shader "BotwVFX/Toon Particle"
         _Softness ("Edge Softness", Range(0, 0.5)) = 0
         _AlphaErosion ("Vertex Alpha -> Erosion", Range(0, 1)) = 1
 
-        [Header(Color Ramp)]
-        [Toggle(_RAMP_ON)] _UseRamp ("Use Ramp (sustituye Core/Edge)", Float) = 0
-        _RampTex ("Ramp (x: 0 = borde, 1 = núcleo)", 2D) = "white" {}
-        _RampRange ("Ramp Range", Range(0.02, 1)) = 0.4
-
         [Header(Extras)]
         _ShadeAmount ("Fake Light (mesh particles)", Range(0, 1)) = 0
         _LightDir ("Fake Light Dir", Vector) = (0.4, 0.8, 0.3, 0)
@@ -67,7 +62,6 @@ Shader "BotwVFX/Toon Particle"
             #pragma fragment frag
             #pragma target 3.0
             #pragma shader_feature_local _POLAR_ON
-            #pragma shader_feature_local _RAMP_ON
             #include "UnityCG.cginc"
             #include "BotwVFX.cginc"
 
@@ -90,8 +84,6 @@ Shader "BotwVFX/Toon Particle"
             float4 _LightDir;
             float _CameraOffset;
             float _BotwDebugMode;
-            sampler2D _RampTex;
-            float _RampRange;
 
             struct appdata
             {
@@ -158,17 +150,8 @@ Shader "BotwVFX/Toon Particle"
                 float alpha = BotwToonStep(edge, _Softness, value);
                 float core = BotwToonStep(edge + _EdgeWidth, _Softness, value);
 
-                #if defined(_RAMP_ON)
-                    // Rampa: el color depende de lo lejos que esté el píxel del borde del corte,
-                    // así que al erosionarse el núcleo "se enfría" (blanco -> amarillo -> rojo).
-                    // tex2Dlod: con tex2D el mip saltaría en los bordes duros.
-                    float rampT = saturate((value - edge) / _RampRange);
-                    float3 col = tex2Dlod(_RampTex, float4(rampT, 0.5, 0, 0)).rgb * _Color.rgb * i.color.rgb * (1.0 + i.custom.z);
-                    float a = alpha;
-                #else
-                    float3 col = lerp(_EdgeColor.rgb, _Color.rgb, core) * i.color.rgb * (1.0 + i.custom.z);
-                    float a = alpha * lerp(_EdgeColor.a, _Color.a, core);
-                #endif
+                float3 col = lerp(_EdgeColor.rgb, _Color.rgb, core) * i.color.rgb * (1.0 + i.custom.z);
+                float a = alpha * lerp(_EdgeColor.a, _Color.a, core);
                 a *= lerp(i.color.a, 1.0, _AlphaErosion);
                 a *= saturate((1.0 - erosion) * 50.0);
 

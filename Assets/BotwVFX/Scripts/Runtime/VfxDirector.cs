@@ -19,22 +19,7 @@ namespace BotwVfx
         [Tooltip("Si no hay un controlador de cámara propio, aplica la sacudida directamente a Camera.main.")]
         public bool applyShakeToMainCamera;
 
-        [Header("Sonido")]
-        [Range(0f, 1f)] public float masterVolume = 0.6f;
-        public bool muted;
-        [Range(0f, 1f)] public float spatialBlend = 0.35f;
-
-        /// <summary>
-        /// Destello de pantalla (color, intensidad 0..1, duración real). Lo escucha
-        /// VfxScreenFlash (URP); así este script no depende de ningún pipeline.
-        /// </summary>
-        public static event System.Action<Color, float, float> FlashRequested;
-
         public Vector3 ShakeOffset { get; private set; }
-
-        const int AudioVoices = 10;
-        AudioSource[] voices;
-        int nextVoice;
 
         float shakeStrength;
         float shakeDuration;
@@ -78,47 +63,6 @@ namespace BotwVfx
                 return;
             d.slowScale = timeScale;
             d.slowUntil = Time.unscaledTime + realSeconds;
-        }
-
-        public static void Flash(Color color, float intensity, float realSeconds)
-        {
-            FlashRequested?.Invoke(color, intensity, realSeconds);
-        }
-
-        public static void PlaySound(AudioClip clip, Vector3 position, float volume, float pitch)
-        {
-            var d = Instance;
-            if (d == null || clip == null || d.muted)
-                return;
-            d.EnsureVoices();
-            var source = d.voices[d.nextVoice];
-            d.nextVoice = (d.nextVoice + 1) % d.voices.Length;
-            source.transform.position = position;
-            source.clip = clip;
-            source.volume = volume * d.masterVolume;
-            // El tono sigue a la cámara lenta: el impacto suena "pesado".
-            source.pitch = pitch * Mathf.Lerp(0.6f, 1f, Mathf.Clamp01(Time.timeScale / Mathf.Max(d.baseTimeScale, 0.01f)));
-            source.Play();
-        }
-
-        void EnsureVoices()
-        {
-            if (voices != null)
-                return;
-            voices = new AudioSource[AudioVoices];
-            for (int i = 0; i < AudioVoices; i++)
-            {
-                var go = new GameObject("Voice" + i);
-                go.transform.SetParent(transform, false);
-                var source = go.AddComponent<AudioSource>();
-                source.playOnAwake = false;
-                source.spatialBlend = spatialBlend;
-                source.rolloffMode = AudioRolloffMode.Linear;
-                source.minDistance = 10f;
-                source.maxDistance = 120f;
-                source.dopplerLevel = 0f;
-                voices[i] = source;
-            }
         }
 
         void Awake()

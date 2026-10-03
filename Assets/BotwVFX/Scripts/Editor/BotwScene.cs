@@ -30,28 +30,7 @@ namespace BotwVfx.EditorTools
             var rng = new System.Random(1234);
 
             // ---------------- Luz y cielo
-            var sunGo = new GameObject("Sun");
-            sunGo.transform.rotation = Quaternion.Euler(38f, 40f, 0f);
-            var sun = sunGo.AddComponent<Light>();
-            sun.type = LightType.Directional;
-            sun.color = new Color(1f, 0.95f, 0.86f);
-            sun.intensity = 1.25f;
-            sun.shadows = LightShadows.Soft;
-            sun.shadowStrength = 1f;
-
-            var sky = BotwMaterials.Get("MAT_Sky");
-            sky.SetVector("_SunDirection", -sunGo.transform.forward);
-            RenderSettings.skybox = sky;
-            RenderSettings.sun = sun;
-            RenderSettings.ambientMode = AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = new Color(0.62f, 0.75f, 0.92f);
-            RenderSettings.ambientEquatorColor = new Color(0.62f, 0.68f, 0.62f);
-            RenderSettings.ambientGroundColor = new Color(0.35f, 0.33f, 0.28f);
-            RenderSettings.fog = true;
-            RenderSettings.fogMode = FogMode.Linear;
-            RenderSettings.fogColor = new Color(0.8f, 0.9f, 0.97f);
-            RenderSettings.fogStartDistance = 45f;
-            RenderSettings.fogEndDistance = 220f;
+            BuildLighting();
 
             // ---------------- Terreno
             var env = new GameObject("Environment").transform;
@@ -108,16 +87,96 @@ namespace BotwVfx.EditorTools
             var explosion = PlaceEffect(BotwEffects.ExplosionPath, effectsRoot, Stations[1]);
             var guardian = PlaceEffect(BotwEffects.GuardianBeamPath, effectsRoot, Stations[2]);
             var arrow = PlaceEffect(BotwEffects.AncientArrowPath, effectsRoot, Stations[3]);
-            var bombV2 = PlaceEffect(BotwEffects.RemoteBombV2Path, effectsRoot, Stations[0]);
-            var explosionV2 = PlaceEffect(BotwEffects.ExplosionV2Path, effectsRoot, Stations[1]);
-            var guardianV2 = PlaceEffect(BotwEffects.GuardianBeamV2Path, effectsRoot, Stations[2]);
-            var arrowV2 = PlaceEffect(BotwEffects.AncientArrowV2Path, effectsRoot, Stations[3]);
-            // La demo arranca mostrando las variaciones; los originales quedan desactivados (tecla V).
-            foreach (var original in new[] { bomb, explosion, guardian, arrow })
-                original.gameObject.SetActive(false);
             BuildGuardianStandIn(env, Stations[2] + BotwEffects.GuardianEyeLocal, Stations[2] + new Vector3(0f, 0.6f, 0f));
 
             // ---------------- Cámara y post-proceso
+            var cam = BuildCamera();
+            AddVolume(BuildProfile());
+
+            new GameObject("VfxDirector").AddComponent<VfxDirector>();
+
+            var demo = new GameObject("Demo").AddComponent<DemoController>();
+            demo.targetCamera = cam;
+            demo.stations = new[]
+            {
+                new DemoController.Station
+                {
+                    name = "Bomba remota", effect = bomb,
+                    description = "Esfera con fresnel + brillo de intersección con el suelo, 8 rayos largos y 50 chispas (vídeo de Daniel Ilett).",
+                    focus = Stations[0] + new Vector3(0f, 1.4f, 0f), yaw = 15f, pitch = 14f, distance = 12f,
+                },
+                new DemoController.Station
+                {
+                    name = "Explosión", effect = explosion,
+                    description = "5 fases: bola de pinchos, onda expansiva, escombros, humo caliente toon y disipación lenta (80.lv).",
+                    focus = Stations[1] + new Vector3(0f, 2.4f, 0f), yaw = 12f, pitch = 12f, distance = 17f,
+                },
+                new DemoController.Station
+                {
+                    name = "Rayo Guardián", effect = guardian,
+                    description = "Láser de apuntado, carga, rayo con tiras de energía, lens flares e impacto con cámara lenta (80.lv).",
+                    focus = Stations[2] + new Vector3(-4.2f, 2.6f, 3.6f), yaw = 42f, pitch = 10f, distance = 19f,
+                },
+                new DemoController.Station
+                {
+                    name = "Flecha ancestral", effect = arrow,
+                    description = "Lente Sheikah con cáusticas, portal en UV polares que lo absorbe todo y colapso final (80.lv).",
+                    focus = Stations[3] + new Vector3(-2.5f, 1.8f, 0f), yaw = 8f, pitch = 8f, distance = 14f,
+                },
+            };
+            DemoController.PoseCamera(cam, demo.stations[0]);
+
+            Directory.CreateDirectory(Path.GetDirectoryName(ScenePath));
+            EditorSceneManager.SaveScene(scene, ScenePath);
+            AddToBuildSettings(ScenePath, first: true);
+        }
+
+        /// <summary>
+        /// Añade la escena a Build Settings sin quitar las demás (la demo BotW queda la primera).
+        /// </summary>
+        internal static void AddToBuildSettings(string path, bool first)
+        {
+            var scenes = new System.Collections.Generic.List<EditorBuildSettingsScene>(EditorBuildSettings.scenes);
+            scenes.RemoveAll(s => s.path == path);
+            var entry = new EditorBuildSettingsScene(path, true);
+            if (first)
+                scenes.Insert(0, entry);
+            else
+                scenes.Add(entry);
+            EditorBuildSettings.scenes = scenes.ToArray();
+        }
+
+        // Sol, cielo degradado, luz ambiente y niebla (compartido con la escena Emerald).
+        internal static Light BuildLighting()
+        {
+            var sunGo = new GameObject("Sun");
+            sunGo.transform.rotation = Quaternion.Euler(38f, 40f, 0f);
+            var sun = sunGo.AddComponent<Light>();
+            sun.type = LightType.Directional;
+            sun.color = new Color(1f, 0.95f, 0.86f);
+            sun.intensity = 1.25f;
+            sun.shadows = LightShadows.Soft;
+            sun.shadowStrength = 1f;
+
+            var sky = BotwMaterials.Get("MAT_Sky");
+            sky.SetVector("_SunDirection", -sunGo.transform.forward);
+            RenderSettings.skybox = sky;
+            RenderSettings.sun = sun;
+            RenderSettings.ambientMode = AmbientMode.Trilight;
+            RenderSettings.ambientSkyColor = new Color(0.62f, 0.75f, 0.92f);
+            RenderSettings.ambientEquatorColor = new Color(0.62f, 0.68f, 0.62f);
+            RenderSettings.ambientGroundColor = new Color(0.35f, 0.33f, 0.28f);
+            RenderSettings.fog = true;
+            RenderSettings.fogMode = FogMode.Linear;
+            RenderSettings.fogColor = new Color(0.8f, 0.9f, 0.97f);
+            RenderSettings.fogStartDistance = 45f;
+            RenderSettings.fogEndDistance = 220f;
+            return sun;
+        }
+
+        // Cámara HDR con post-proceso y SMAA (compartida con la escena Emerald).
+        internal static Camera BuildCamera()
+        {
             var camGo = new GameObject("Main Camera");
             camGo.tag = "MainCamera";
             var cam = camGo.AddComponent<Camera>();
@@ -130,58 +189,23 @@ namespace BotwVfx.EditorTools
             var camData = cam.GetUniversalAdditionalCameraData();
             camData.renderPostProcessing = true;
             camData.antialiasing = AntialiasingMode.SubpixelMorphologicalAntiAliasing;
+            return cam;
+        }
 
+        internal static Volume AddVolume(VolumeProfile profile)
+        {
             var volumeGo = new GameObject("Global Volume");
             var volume = volumeGo.AddComponent<Volume>();
             volume.isGlobal = true;
-            volume.sharedProfile = BuildProfile();
+            volume.sharedProfile = profile;
+            return volume;
+        }
 
-            var director = new GameObject("VfxDirector");
-            director.AddComponent<VfxDirector>();
-            director.AddComponent<VfxScreenFlash>();
-
-            var demo = new GameObject("Demo").AddComponent<DemoController>();
-            demo.targetCamera = cam;
-            demo.stations = new[]
-            {
-                new DemoController.Station
-                {
-                    name = "Bomba remota", effect = bomb,
-                    variant = bombV2,
-                    variantDescription = "V2: borde de la esfera roto en llamas, rampa Sheikah, onda de distorsión, polvo iluminado por el sol, destello y sonido.",
-                    description = "Esfera con fresnel + brillo de intersección con el suelo, 8 rayos largos y 50 chispas (vídeo de Daniel Ilett).",
-                    focus = Stations[0] + new Vector3(0f, 1.4f, 0f), yaw = 15f, pitch = 14f, distance = 12f,
-                },
-                new DemoController.Station
-                {
-                    name = "Explosión", effect = explosion,
-                    variant = explosionV2,
-                    variantDescription = "V2: fuego con rampa de color, onda de aire que distorsiona, calor que sube, humo con 4 formas iluminado por el sol y escombros con estela de polvo.",
-                    description = "5 fases: bola de pinchos, onda expansiva, escombros, humo caliente toon y disipación lenta (80.lv).",
-                    focus = Stations[1] + new Vector3(0f, 2.4f, 0f), yaw = 12f, pitch = 12f, distance = 17f,
-                },
-                new DemoController.Station
-                {
-                    name = "Rayo Guardián", effect = guardian,
-                    variant = guardianV2,
-                    variantDescription = "V2: ojo azul que pasa a rosa, pitidos que aceleran, proyectil visible, tiras de energía grandes, aire caliente alrededor del rayo e impacto V2.",
-                    description = "Láser de apuntado, carga, rayo con tiras de energía, lens flares e impacto con cámara lenta (80.lv).",
-                    focus = Stations[2] + new Vector3(-4.2f, 2.6f, 3.6f), yaw = 42f, pitch = 10f, distance = 19f,
-                },
-                new DemoController.Station
-                {
-                    name = "Flecha ancestral", effect = arrow,
-                    variant = arrowV2,
-                    variantDescription = "V2: el enemigo se disuelve y es absorbido, lente inclinada en 3D, distorsión que tira hacia el portal y estela con chispas.",
-                    description = "Lente Sheikah con cáusticas, portal en UV polares que lo absorbe todo y colapso final (80.lv).",
-                    focus = Stations[3] + new Vector3(-2.5f, 1.8f, 0f), yaw = 8f, pitch = 8f, distance = 14f,
-                },
-            };
-            DemoController.PoseCamera(cam, demo.stations[0]);
-
-            Directory.CreateDirectory(Path.GetDirectoryName(ScenePath));
-            EditorSceneManager.SaveScene(scene, ScenePath);
-            EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };
+        /// <summary>Perfil de post-proceso existente (no lo regenera); lo crea si falta.</summary>
+        internal static VolumeProfile LoadOrBuildProfile()
+        {
+            var profile = AssetDatabase.LoadAssetAtPath<VolumeProfile>(ProfilePath);
+            return profile != null ? profile : BuildProfile();
         }
 
         static VfxTimeline PlaceEffect(string prefabPath, Transform parent, Vector3 position)
@@ -251,7 +275,7 @@ namespace BotwVfx.EditorTools
             return Vector2.Distance(p, a + ab * t);
         }
 
-        static GameObject AddRock(Transform parent, Material mat, Vector3 position, float size, System.Random rng)
+        internal static GameObject AddRock(Transform parent, Material mat, Vector3 position, float size, System.Random rng)
         {
             var go = new GameObject("Rock");
             go.transform.SetParent(parent, false);
@@ -263,7 +287,7 @@ namespace BotwVfx.EditorTools
             return go;
         }
 
-        static void AddTree(Transform parent, Material bark, Material leaves, Vector3 position, float scale, System.Random rng)
+        internal static void AddTree(Transform parent, Material bark, Material leaves, Vector3 position, float scale, System.Random rng)
         {
             var tree = new GameObject("Tree").transform;
             tree.SetParent(parent, false);
@@ -336,7 +360,7 @@ namespace BotwVfx.EditorTools
             limb.transform.localScale = new Vector3(thickness, Vector3.Distance(a, b) * 0.5f, thickness);
         }
 
-        static GameObject CreatePrimitive(PrimitiveType type, string name, Transform parent, Material mat)
+        internal static GameObject CreatePrimitive(PrimitiveType type, string name, Transform parent, Material mat)
         {
             var go = GameObject.CreatePrimitive(type);
             go.name = name;
@@ -346,6 +370,6 @@ namespace BotwVfx.EditorTools
             return go;
         }
 
-        static float Range(System.Random rng, float min, float max) => min + (float)rng.NextDouble() * (max - min);
+        internal static float Range(System.Random rng, float min, float max) => min + (float)rng.NextDouble() * (max - min);
     }
 }

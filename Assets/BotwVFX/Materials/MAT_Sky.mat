@@ -31,7 +31,7 @@ Material:
     - _BottomColor: {r: 0.62, g: 0.68, b: 0.62, a: 1}
     - _HorizonColor: {r: 0.84, g: 0.93, b: 0.98, a: 1}
     - _SunColor: {r: 1.6, g: 1.4, b: 1.1, a: 1}
-    - _SunDirection: {r: -0.50652355, g: 0.6156615, b: -0.6036512, a: 0}
+    - _SunDirection: {r: -0.50652355, g: 0.6156616, b: -0.60365117, a: 0}
     - _TopColor: {r: 0.33, g: 0.6, b: 0.93, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

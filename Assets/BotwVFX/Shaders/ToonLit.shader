@@ -11,13 +11,6 @@ Shader "BotwVFX/Environment/Toon Lit"
         _RampSoftness ("Ramp Softness", Range(0.001, 0.5)) = 0.02
         _AmbientAmount ("Ambient", Range(0, 1)) = 0.35
         _RimColor ("Rim Color (A = strength)", Color) = (1, 1, 0.9, 0.12)
-
-        [Header(Dissolve)]
-        [Toggle(_DISSOLVE_ON)] _UseDissolve ("Dissolve", Float) = 0
-        _Dissolve ("Dissolve Amount", Range(0, 1)) = 0
-        [HDR] _DissolveEdgeColor ("Dissolve Edge", Color) = (1, 3, 5, 1)
-        _DissolveEdgeWidth ("Dissolve Edge Width", Range(0, 0.3)) = 0.08
-        _DissolveScale ("Dissolve Noise Scale", Float) = 3
     }
 
     HLSLINCLUDE
@@ -31,29 +24,7 @@ Shader "BotwVFX/Environment/Toon Lit"
         float _RampSoftness;
         float _AmbientAmount;
         float4 _RimColor;
-        float _Dissolve;
-        float4 _DissolveEdgeColor;
-        float _DissolveEdgeWidth;
-        float _DissolveScale;
     CBUFFER_END
-
-    float ToonHash(float3 p)
-    {
-        p = frac(p * 0.3183099 + 0.1);
-        p *= 17.0;
-        return frac(p.x * p.y * p.z * (p.x + p.y + p.z));
-    }
-
-    float ToonNoise(float3 x)
-    {
-        float3 i = floor(x);
-        float3 f = frac(x);
-        f = f * f * (3.0 - 2.0 * f);
-        return lerp(lerp(lerp(ToonHash(i), ToonHash(i + float3(1, 0, 0)), f.x),
-                         lerp(ToonHash(i + float3(0, 1, 0)), ToonHash(i + float3(1, 1, 0)), f.x), f.y),
-                    lerp(lerp(ToonHash(i + float3(0, 0, 1)), ToonHash(i + float3(1, 0, 1)), f.x),
-                         lerp(ToonHash(i + float3(0, 1, 1)), ToonHash(i + float3(1, 1, 1)), f.x), f.y), f.z);
-    }
     ENDHLSL
 
     SubShader
@@ -73,7 +44,6 @@ Shader "BotwVFX/Environment/Toon Lit"
             #pragma multi_compile _ _CLUSTER_LIGHT_LOOP
             #pragma multi_compile_fragment _ _SHADOWS_SOFT _SHADOWS_SOFT_LOW _SHADOWS_SOFT_MEDIUM _SHADOWS_SOFT_HIGH
             #pragma multi_compile_fog
-            #pragma shader_feature_local _DISSOLVE_ON
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
             TEXTURE2D(_BaseMap);
@@ -94,7 +64,6 @@ Shader "BotwVFX/Environment/Toon Lit"
                 float3 normalWS : TEXCOORD1;
                 float2 uv : TEXCOORD2;
                 float fogFactor : TEXCOORD3;
-                float3 positionOS : TEXCOORD4;
                 float4 color : COLOR;
             };
 
@@ -102,7 +71,6 @@ Shader "BotwVFX/Environment/Toon Lit"
             {
                 Varyings o;
                 VertexPositionInputs p = GetVertexPositionInputs(v.positionOS.xyz);
-                o.positionOS = v.positionOS.xyz;
                 o.positionCS = p.positionCS;
                 o.positionWS = p.positionWS;
                 o.normalWS = TransformObjectToWorldNormal(v.normalOS);
@@ -142,14 +110,6 @@ Shader "BotwVFX/Environment/Toon Lit"
 
                 float rim = pow(1.0 - saturate(dot(n, v)), 4.0) * lit;
                 color += _RimColor.rgb * step(0.5, rim) * _RimColor.a;
-
-                #if defined(_DISSOLVE_ON)
-                    // Disolución con borde brillante (enemigo absorbido por la flecha ancestral).
-                    float dn = ToonNoise(i.positionOS * _DissolveScale) * 0.7 + ToonNoise(i.positionOS * _DissolveScale * 2.3 + 7.1) * 0.3;
-                    float cut = _Dissolve * 1.05;
-                    clip(dn - cut);
-                    color = lerp(color, _DissolveEdgeColor.rgb, step(dn, cut + _DissolveEdgeWidth) * step(0.001, _Dissolve));
-                #endif
 
                 color = MixFog(color, i.fogFactor);
                 return half4(color, 1.0);
