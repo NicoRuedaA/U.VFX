@@ -241,5 +241,64 @@ Shader "BotwVFX/Emerald Toon"
             }
             ENDHLSL
         }
+
+        // Profundidad de los sólidos (modo 4). El reproductor pone a todos los dibujos de un mismo "order" la misma
+        // cola de render (3000 + order); el sólido sin ZWrite (flags 0) y su contorno de casco invertido (modo 5)
+        // empatan y el orden de dibujo depende de la cámara: si el contorno va después, pinta encima del sólido
+        // entero (029: nube de polvo crema que salía marrón oscuro en la vista de combate). Con este pase el
+        // sólido siempre escribe profundidad y el contorno solo asoma por la silueta, en cualquier orden.
+        // Solo modo 4 y con opacidad escalonada >= 0,5 (un sólido casi transparente no tapa nada).
+        Pass
+        {
+            Name "EmeraldToonSolidDepth"
+            Tags { "LightMode" = "UniversalForward" }
+            ColorMask 0
+            Cull [_Cull]
+            ZWrite On
+            ZTest [_ZTest]
+
+            HLSLPROGRAM
+            #pragma vertex vertDepth
+            #pragma fragment fragDepth
+            #pragma target 3.0
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+
+            CBUFFER_START(UnityPerMaterial)
+                float4 _Color;
+                float _Mode;
+                float _EmissionBoost;
+                float _CoreBoost;
+                float _BodyMax;
+                float _CoreWhite;
+                float _Saturation;
+                float _NoiseScale;
+                float _NoiseSpeed;
+                float _NoiseAmount;
+                float _EdgeErosion;
+                float _AlphaErosion;
+                float _IntersectionDistance;
+                float _IntersectionStrength;
+                float4 _ShadowColor;
+                float _RampThreshold;
+                float _RampSoftness;
+                float _AmbientAmount;
+                float4 _RimColor;
+                float _OutlineWidth;
+            CBUFFER_END
+
+            float4 vertDepth(float4 positionOS : POSITION) : SV_POSITION
+            {
+                return TransformObjectToHClip(positionOS.xyz);
+            }
+
+            half4 fragDepth() : SV_Target
+            {
+                float a = saturate(_Color.a);
+                a = a < 0.1667 ? a * 2.0 : min(1.0, ceil(a * 3.0 - 0.5) / 3.0);
+                clip((abs(_Mode - 4.0) < 0.5 && a >= 0.5) ? 1.0 : -1.0);
+                return 0;
+            }
+            ENDHLSL
+        }
     }
 }

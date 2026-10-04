@@ -17,7 +17,9 @@ namespace BotwVfx.EditorTools
     /// Importa los 165 movimientos Emerald (Assets/EmeraldMoveVFX) con estilo BotW:
     /// - conserva la animación horneada original (EmeraldVfxPlayer) con el shader "BotwVFX/Emerald Toon",
     /// - calcula el instante de impacto a partir de ImpactStrength,
-    /// - añade capas Shuriken genéricas por tipo (tabla de datos, no un caso por movimiento),
+    /// - si el movimiento tiene receta propia (EmeraldRecipes.M###, diseñada a partir de sus referencias)
+    ///   la usa: timeline de 3,6 s, clip horneado recolocado y capas de EmeraldLayers;
+    /// - si no, añade las capas Shuriken genéricas por tipo (tabla de datos, reserva hasta tener receta),
     /// - genera la escena de galería EmeraldMoves_Demo.
     /// Menú: Tools/BotW VFX/Import Emerald Moves.
     /// Línea de comandos: -executeMethod BotwVfx.EditorTools.EmeraldMoves.BuildBatch
@@ -167,6 +169,7 @@ namespace BotwVfx.EditorTools
             BotwMaterials.CreateEmeraldShared();
             foreach (var style in Types.Values)
                 BotwMaterials.CreateEmeraldType(style.key, style.core, style.edge);
+            EmeraldLayers.BeginBuild();
             AssetDatabase.SaveAssets();
             var toon = BotwMaterials.Get("EM_Toon");
             if (ShaderUtil.ShaderHasError(toon.shader))
@@ -175,7 +178,7 @@ namespace BotwVfx.EditorTools
             // Prefabs.
             Directory.CreateDirectory(PrefabFolder);
             var prefabs = new EmeraldMoveVfx[catalogue.moves.Length];
-            int slow = 0, noImpact = 0, selfFocus = 0;
+            int slow = 0, noImpact = 0, selfFocus = 0, recipes = 0;
             for (int i = 0; i < catalogue.moves.Length; i++)
             {
                 var e = catalogue.moves[i];
@@ -185,6 +188,12 @@ namespace BotwVfx.EditorTools
                 var saved = PrefabUtility.SaveAsPrefabAsset(go, path);
                 Object.DestroyImmediate(go);
                 prefabs[i] = saved.GetComponent<EmeraldMoveVfx>();
+                if (prefabs[i].hasRecipe)
+                {
+                    recipes++;
+                    if (prefabs[i].slowMotion.Count > 0) slow++;
+                    continue;
+                }
                 if (info.slowMotion) slow++;
                 if (info.peak <= 0.01f) noImpact++;
                 if (info.focus == Attacker) selfFocus++;
@@ -192,7 +201,7 @@ namespace BotwVfx.EditorTools
             EditorUtility.ClearProgressBar();
             AssetDatabase.SaveAssets();
             Debug.Log($"[BotW VFX] Emerald: {prefabs.Length} prefabs en {PrefabFolder} " +
-                      $"(sin impacto: {noImpact}, foco en atacante: {selfFocus}, con cámara lenta: {slow}).");
+                      $"(con receta propia: {recipes}; genéricos sin impacto: {noImpact}, foco en atacante: {selfFocus}; con cámara lenta: {slow}).");
 
             BuildScene(prefabs.OrderBy(p => p.moveId).ToArray());
             AssetDatabase.SaveAssets();
@@ -345,12 +354,31 @@ namespace BotwVfx.EditorTools
             player.enabled = false; // en reposo no dibuja (EmeraldMoveVfx lo activa al reproducir)
             fx.player = player;
 
+            fx.bakedOffset = 0f;
+            fx.bakedLength = animDuration;
+            fx.bakedVisible = true;
+            fx.bakedScale = Vector3.one;
+
+            // Receta propia del movimiento (diseñada a partir de sus referencias).
+            if (EmeraldRecipes.TryGet(e.id, out var recipe))
+            {
+                var builder = new EmeraldMoveBuilder(fx, e.id, e.type, ParseColor(e.color), info.impactTime, info.peak, animDuration);
+                recipe(builder);
+                if (fx.impactTime <= 0f || fx.peakTime <= fx.impactTime)
+                    throw new InvalidDataException($"La receta M{e.id:000} no fija los instantes clave (Keys).");
+                return root;
+            }
+
+            // Reserva: capas genéricas por tipo.
             fx.impactTime = info.impactTime;
             fx.impactStrength = Mathf.Clamp01(info.peak);
             fx.impactPoint = info.focus;
             fx.viewMin = info.viewMin;
             fx.viewMax = info.viewMax;
             fx.duration = Mathf.Max(animDuration, info.impactTime + Tail);
+            fx.anticipationTime = info.impactTime * 0.5f;
+            fx.peakTime = Mathf.Min(info.impactTime + 0.15f, fx.duration);
+            fx.dissipationTime = Mathf.Min(info.impactTime + 0.6f, fx.duration);
 
             BuildLayers(fx, e, style, info);
             return root;

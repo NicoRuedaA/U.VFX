@@ -16,6 +16,10 @@ namespace BotwVfx.EditorTools
     ///   -captureDir RUTA  -moves 1,53,56  [-shader "Nombre/Del Shader"] (sustituye el material horneado, para comparar)
     /// - PlayBatch: en Play, como un usuario (galería real, sacudida, cámara lenta); falla con cualquier error.
     ///   -captureDir RUTA  -moves 1,94
+    /// - CompareBatch: vista de combate en tres cuartos (atacante delante a la izquierda, objetivo al fondo),
+    ///   los 4 instantes clave de cada movimiento (anticipación, impacto, pico, disipación) en una tira
+    ///   NNN_ours.png, para montarla junto a las referencias.  -captureDir RUTA  -moves 1-20
+    /// -moves admite listas y rangos: 1,53,56  ·  1-20  ·  1-5,94
     /// </summary>
     [InitializeOnLoad]
     public static class EmeraldCapture
@@ -125,6 +129,9 @@ namespace BotwVfx.EditorTools
         static void RenderAt(EmeraldMoveVfx fx, float t, Camera cam, RenderTexture rt, Texture2D into, out int draws)
         {
             fx.Preview(t);
+            // Sin bucle de juego: orientamos a mano los emisores que miran a cámara.
+            foreach (var face in fx.GetComponentsInChildren<FaceCamera>(true))
+                face.Face(cam.transform.position);
             cam.targetTexture = rt;
             cam.Render(); // calentamiento, como en BotwCapture
             // Sin bucle de juego entre medias: encolamos los dibujos horneados para esta cámara.
@@ -136,6 +143,107 @@ namespace BotwVfx.EditorTools
             into.Apply();
             RenderTexture.active = null;
             cam.targetTexture = null;
+        }
+
+        // ---------------------------------------------------------------- comparativa (tres cuartos)
+
+        const int CmpWidth = 480;
+        const int CmpHeight = 270;
+        // Vista de combate en tres cuartos: detrás y a la izquierda del atacante (-3,0,0), mirando al objetivo (+3,0,0).
+        public static readonly Vector3 BattleCameraPosition = new Vector3(-6.4f, 2.3f, -4.6f);
+        public static readonly Vector3 BattleCameraLookAt = new Vector3(0.2f, 1.2f, 0.6f);
+
+        public static void CompareBatch()
+        {
+            try
+            {
+                string dir = GetArg("-captureDir") ?? Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Captures", "EmeraldCompare"));
+                CompareAll(dir, ParseMoves());
+                EditorApplication.Exit(0);
+            }
+            catch (Exception e)
+            {
+                Debug.LogException(e);
+                EditorApplication.Exit(1);
+            }
+        }
+
+        static void CompareAll(string dir, int[] ids)
+        {
+            Directory.CreateDirectory(dir);
+            EditorSceneManager.OpenScene(EmeraldMoves.ScenePath);
+            var gallery = Object.FindAnyObjectByType<EmeraldGallery>();
+            var cam = gallery.targetCamera;
+            var stage = gallery.stage != null ? gallery.stage.position : Vector3.zero;
+            cam.transform.position = stage + BattleCameraPosition;
+            cam.transform.LookAt(stage + BattleCameraLookAt);
+
+            var rt = new RenderTexture(CmpWidth, CmpHeight, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+            var frame = new Texture2D(CmpWidth, CmpHeight, TextureFormat.RGB24, false);
+            var log = new List<string>();
+            try
+            {
+                foreach (int id in ids)
+                {
+                    var prefab = gallery.moves.FirstOrDefault(m => m != null && m.moveId == id);
+                    if (prefab == null)
+                        throw new InvalidDataException($"No hay prefab para el movimiento {id}.");
+                    var go = (GameObject)PrefabUtility.InstantiatePrefab(prefab.gameObject, gallery.stage);
+                    var fx = go.GetComponent<EmeraldMoveVfx>();
+                    var times = new[]
+                    {
+                        fx.anticipationTime, Mathf.Min(fx.impactTime + ImpactShotDelay, fx.duration),
+                        Mathf.Min(fx.peakTime, fx.duration), Mathf.Min(fx.dissipationTime, fx.duration),
+                    };
+                    var strip = new Texture2D(CmpWidth * times.Length, CmpHeight, TextureFormat.RGB24, false);
+                    int peakDraws = 0, peakBatches = 0, peakBaked = 0;
+                    for (int k = 0; k < times.Length; k++)
+                    {
+                        RenderAt(fx, times[k], cam, rt, frame, out int draws);
+                        if (k == 2)
+                        {
+                            peakBaked = draws;
+                            // UnityStats no se actualiza con cam.Render() en batchmode: estimamos los draw calls
+                            // del efecto (sistemas con partículas vivas + estelas + mallas/líneas visibles + horneados).
+                            peakDraws = draws;
+                            foreach (var ps in go.GetComponentsInChildren<ParticleSystem>(true))
+                            {
+                                if (ps.particleCount == 0)
+                                    continue;
+                                peakBatches++;
+                                peakDraws += ps.trails.enabled ? 2 : 1;
+                            }
+                            peakDraws += go.GetComponentsInChildren<Renderer>(true).Count(r => !(r is ParticleSystemRenderer) && r.enabled);
+                        }
+                        strip.SetPixels(k * CmpWidth, 0, CmpWidth, CmpHeight, frame.GetPixels());
+                    }
+                    Save(strip, Path.Combine(dir, $"{id:000}_ours.png"));
+
+                    int systems = go.GetComponentsInChildren<ParticleSystem>(true).Length;
+                    int renderers = go.GetComponentsInChildren<Renderer>(true).Count(r => !(r is ParticleSystemRenderer));
+                    string path = AssetDatabase.GetAssetPath(prefab.gameObject);
+                    long bytes = string.IsNullOrEmpty(path) ? 0 : new FileInfo(path).Length;
+                    fx.Preview(-1f);
+                    bool restOk = !fx.player.enabled && go.GetComponentsInChildren<Renderer>(true).All(r => r is ParticleSystemRenderer || !r.enabled);
+                    string line = string.Format(CultureInfo.InvariantCulture,
+                        "{0:000} {1}: receta={2} t=[{3}] sistemas={4} mallas/líneas={5} horneados@pico={6} drawCallsEstimados@pico={7} sistemasVivos@pico={8} prefab={9:0.0}KB reposo={10}",
+                        id, fx.moveName, fx.hasRecipe ? "sí" : "no", string.Join(", ", times.Select(t => t.ToString("0.00", CultureInfo.InvariantCulture))),
+                        systems, renderers, peakBaked, peakDraws, peakBatches, bytes / 1024f, restOk ? "OK" : "ERROR");
+                    log.Add(line);
+                    Debug.Log("[BotW VFX] Emerald comparativa " + line);
+                    if (!restOk)
+                        throw new InvalidOperationException($"{id:000}: quedan partes visibles en reposo.");
+                    Object.DestroyImmediate(go);
+                }
+            }
+            finally
+            {
+                cam.targetTexture = null;
+                RenderTexture.active = null;
+                Object.DestroyImmediate(rt);
+                Object.DestroyImmediate(frame);
+                File.WriteAllLines(Path.Combine(dir, "compare_log.txt"), log);
+            }
         }
 
         // ---------------------------------------------------------------- Play
@@ -233,8 +341,11 @@ namespace BotwVfx.EditorTools
                     if (fx != null && fx.IsPlaying && fx.CurrentTime >= fx.impactTime)
                     {
                         maxDraws = Mathf.Max(maxDraws, fx.player.VisibleMeshCount);
-                        if (!fx.player.enabled || fx.player.VisibleMeshCount == 0)
+                        // Solo si la receta deja el clip horneado activo en ese instante.
+                        if (fx.BakedActiveAt(fx.CurrentTime) && (!fx.player.enabled || fx.player.VisibleMeshCount == 0))
                             problems.Add($"{fx.Title}: la animación horneada no dibuja en el impacto.");
+                        if (fx.hasRecipe && Mathf.Abs(fx.duration - 3.6f) > 0.001f)
+                            problems.Add($"{fx.Title}: la receta no dura 3,6 s ({fx.duration:0.00}).");
                         Capture(gallery.targetCamera, $"play_{fx.moveId:000}_{Sanitize(fx.moveName)}");
                         playIndex++;
                         phase = 0;
@@ -294,7 +405,18 @@ namespace BotwVfx.EditorTools
         static int[] ParseMoves()
         {
             string arg = GetArg("-moves");
-            return string.IsNullOrEmpty(arg) ? DefaultMoves : arg.Split(',').Select(s => int.Parse(s.Trim(), CultureInfo.InvariantCulture)).ToArray();
+            if (string.IsNullOrEmpty(arg))
+                return DefaultMoves;
+            var ids = new List<int>();
+            foreach (var part in arg.Split(','))
+            {
+                var range = part.Trim().Split('-');
+                int a = int.Parse(range[0].Trim(), CultureInfo.InvariantCulture);
+                int b = range.Length > 1 ? int.Parse(range[1].Trim(), CultureInfo.InvariantCulture) : a;
+                for (int i = Mathf.Min(a, b); i <= Mathf.Max(a, b); i++)
+                    ids.Add(i);
+            }
+            return ids.ToArray();
         }
 
         static void SaveCopy(Texture2D tex, string path) => File.WriteAllBytes(path, tex.EncodeToPNG());
