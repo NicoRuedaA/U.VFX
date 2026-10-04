@@ -79,32 +79,16 @@ namespace BotwVfx.EditorTools
         }
 
         // Anime: a duplicate decoy. Game: a squat green doll with belly, pointed ears, muzzle and tail in white smoke.
-        // The doll is a local effect proxy; the gallery mannequin itself is not a rig and stays in place.
+        // LunaEagle's attributed model temporarily replaces the bound gallery attacker.
         static void M164(EmeraldMoveBuilder b)
         {
             b.Keys(.65f, 1.05f, 1.5f, 2.85f, AttackerChest, 0f);
             b.HideBaked();
-            var doll = b.Node("SubstituteDoll", Attacker + new Vector3(1.3f, 0f, -.15f));
-            var body = b.MeshPart("DollBody", BotwMeshes.Sphere, Mat(DollGreen, "Solid"), new Vector3(0f, .65f, 0f), Vector3.zero, new Vector3(.52f, .65f, .48f), doll);
-            var head = b.MeshPart("DollHead", BotwMeshes.Sphere, Mat(DollGreen, "Solid"), new Vector3(.1f, 1.27f, 0f), Vector3.zero, new Vector3(.42f, .4f, .38f), doll);
-            var belly = b.MeshPart("DollBelly", BotwMeshes.Sphere, Mat(DollBelly, "Solid"), new Vector3(-.16f, .6f, -.37f), Vector3.zero, new Vector3(.34f, .45f, .12f), doll, 1);
-            var muzzle = b.MeshPart("DollMuzzle", BotwMeshes.Sphere, Mat(DollBelly, "Solid"), new Vector3(.38f, 1.15f, -.12f), Vector3.zero, new Vector3(.32f, .18f, .3f), doll, 1);
-            var tail = b.MeshPart("DollTail", Cone, Mat(DollGreen, "Solid"), new Vector3(-.48f, .24f, .15f), new Vector3(0f, 0f, 65f), new Vector3(.38f, .85f, .38f), doll);
-            var parts = new System.Collections.Generic.List<MeshRenderer> { body, head, belly, muzzle, tail };
-            for (int side = -1; side <= 1; side += 2)
-            {
-                parts.Add(b.MeshPart("DollEar", Cone, Mat(DollGreen, "Solid"), new Vector3(.02f, 1.65f, side * .24f), new Vector3(side * 15f, 0f, -10f), new Vector3(.2f, .38f, .22f), doll));
-                parts.Add(b.MeshPart("DollFoot", BotwMeshes.Sphere, Mat(DollGreen, "Solid"), new Vector3(.23f, .16f, side * .35f), Vector3.zero, new Vector3(.36f, .18f, .22f), doll));
-                parts.Add(b.MeshPart("DollEye", BotwMeshes.Sphere, Mat(DollEyes, "Solid"), new Vector3(.23f, 1.35f, side * .32f), Vector3.zero, Vector3.one * .055f, doll, 2));
-            }
-            foreach (var part in parts)
-            {
-                var tr = b.Track(part.transform, part, .8f, 2.75f);
-                tr.scaleFrom = Vector3.zero; tr.scaleTo = part.transform.localScale;
-                tr.scaleCurve = C(.8f, 0f, 1.02f, 1.08f, 1.12f, 1f, 2.5f, 1f, 2.75f, 0f);
-            }
-            Smoke(b, doll.localPosition + Vector3.up * .4f, BotwMaterials.Get("EX_Smoke"), .8f, 12, .75f, .35f, .7f, .85f);
-            Smoke(b, doll.localPosition + Vector3.up * .4f, BotwMaterials.Get("EX_Smoke"), 2.5f, 6, .5f, .35f, .5f, .7f);
+            b.root.gameObject.AddComponent<EmeraldActorReplacement>();
+            var doll = EmeraldSubstituteModel.Add(b, Attacker);
+            var whiteSmoke = EmeraldSubstituteModel.WhiteSmoke();
+            Smoke(b, doll.localPosition + Vector3.up * .4f, whiteSmoke, .8f, 12, .75f, .35f, .7f, .85f);
+            Smoke(b, doll.localPosition + Vector3.up * .4f, whiteSmoke, 2.5f, 6, .5f, .35f, .5f, .7f);
             Glints(b, doll.localPosition + Vector3.up, Mint, 1.05f, .7f, .7f, 8f, .45f);
         }
 

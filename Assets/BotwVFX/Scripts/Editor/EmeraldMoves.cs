@@ -668,6 +668,7 @@ namespace BotwVfx.EditorTools
             var gallery = new GameObject("Gallery").AddComponent<EmeraldGallery>();
             gallery.moves = prefabs;
             gallery.stage = stage;
+            gallery.attacker = env.Find("Atacante (atrezo)");
             gallery.targetCamera = cam;
             gallery.PoseFor(prefabs.Length > 0 ? prefabs[0] : null, cam);
 

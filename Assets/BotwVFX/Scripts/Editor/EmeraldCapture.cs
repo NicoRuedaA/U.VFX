@@ -83,6 +83,7 @@ namespace BotwVfx.EditorTools
                         throw new InvalidDataException($"No hay prefab para el movimiento {id}.");
                     var go = (GameObject)PrefabUtility.InstantiatePrefab(prefab.gameObject, gallery.stage);
                     var fx = go.GetComponent<EmeraldMoveVfx>();
+                    gallery.BindActors(fx);
                     if (overrideMat != null)
                         fx.player.effectMaterial = overrideMat;
                     string baseName = $"{id:000}_{Sanitize(fx.moveName)}{suffix}";
@@ -190,6 +191,7 @@ namespace BotwVfx.EditorTools
                         throw new InvalidDataException($"No hay prefab para el movimiento {id}.");
                     var go = (GameObject)PrefabUtility.InstantiatePrefab(prefab.gameObject, gallery.stage);
                     var fx = go.GetComponent<EmeraldMoveVfx>();
+                    gallery.BindActors(fx);
                     var times = new[]
                     {
                         fx.anticipationTime, Mathf.Min(fx.impactTime + ImpactShotDelay, fx.duration),

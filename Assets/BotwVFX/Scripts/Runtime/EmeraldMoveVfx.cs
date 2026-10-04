@@ -127,6 +127,8 @@ namespace BotwVfx
         public Vector2 viewMin = new Vector2(-3f, 0f);
         public Vector2 viewMax = new Vector2(3f, 2f);
 
+        public event Action<float> Evaluated;
+
         public string Title => $"{moveId:000} {moveName} — {moveType}";
 
         /// <summary>True si en el instante t de la timeline el clip horneado debe dibujarse.</summary>
@@ -164,6 +166,7 @@ namespace BotwVfx
             }
             for (int i = 0; i < tracks.Count; i++)
                 tracks[i]?.Evaluate(t >= 0f && t <= duration ? t : -1f);
+            Evaluated?.Invoke(t >= 0f && t <= duration ? t : -1f);
         }
 
         /// <summary>

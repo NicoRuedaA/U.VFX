@@ -16,6 +16,7 @@ namespace BotwVfx
         public EmeraldMoveVfx[] moves = Array.Empty<EmeraldMoveVfx>();
         [Tooltip("Punto medio entre atacante (-3,0,0) y objetivo (+3,0,0).")]
         public Transform stage;
+        public Transform attacker;
         public int startIndex;
 
         [Header("Reproducción")]
@@ -66,7 +67,10 @@ namespace BotwVfx
                 return;
             index = (index % moves.Length + moves.Length) % moves.Length;
             if (Current != null)
+            {
+                Current.StopAndClear();
                 Destroy(Current.gameObject);
+            }
             CurrentIndex = index;
             Current = null;
             autoTimer = -1f;
@@ -75,8 +79,20 @@ namespace BotwVfx
                 return;
             var parent = stage != null ? stage : transform;
             Current = Instantiate(prefab, parent.position, parent.rotation, parent);
+            BindActors(Current);
             Frame(Current, targetCamera, out goalPivot, out goalDistance);
             Current.Play();
+        }
+
+        public void BindActors(EmeraldMoveVfx effect)
+        {
+            if (effect != null && effect.TryGetComponent<EmeraldActorReplacement>(out var replacement))
+                replacement.Bind(attacker);
+        }
+
+        void OnDisable()
+        {
+            if (Current != null) Current.StopAndClear();
         }
 
         public void Next() => Show(CurrentIndex + 1);
